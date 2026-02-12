@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Harmonic Analysis Lab</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Menlo', 'Consolas', 'Monaco', monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+  h1 { font-size: 18px; color: #7ec8e3; margin-bottom: 12px; }
+  .controls { margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  label { color: #aaa; }
+  input, select, button { font-family: inherit; font-size: 13px; background: #16213e; color: #e0e0e0; border: 1px solid #444; padding: 6px 10px; border-radius: 4px; }
+  input:focus, select:focus { outline: none; border-color: #7ec8e3; }
+  input.wide { width: 400px; }
+  button { background: #0f3460; cursor: pointer; border-color: #7ec8e3; }
+  button:hover { background: #1a4a7a; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .presets button { font-size: 11px; padding: 3px 8px; background: #1a1a3e; }
+  .help { color: #666; font-size: 11px; margin-bottom: 10px; }
+  #output { white-space: pre; background: #0f0f1a; border: 1px solid #333; border-radius: 6px; padding: 16px; overflow-x: auto; line-height: 1.5; max-height: 80vh; overflow-y: auto; }
+  #error { color: #ff6b6b; margin-bottom: 8px; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<h1>Harmonic Analysis Lab</h1>
+<div class="controls">
+  <div class="row">
+    <label>Voice 1: <input id="v1" class="wide" value="C4 E4 G4 B4 A4 F4 A4 C5" /></label>
+    <label>Dur:
+      <select id="dur1">
+        <option value="2">Half</option>
+        <option value="1" selected>Quarter</option>
+        <option value="0.5">Eighth</option>
+        <option value="0.25">Sixteenth</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <label>Voice 2: <input id="v2" class="wide" value="" placeholder="(optional) e.g. G3 C4 E4 D4" /></label>
+    <label>Dur:
+      <select id="dur2">
+        <option value="2">Half</option>
+        <option value="1" selected>Quarter</option>
+        <option value="0.5">Eighth</option>
+        <option value="0.25">Sixteenth</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <button onclick="doRunAll()">Run all durations (voice 1 only)</button>
+    <button onclick="doRunOne()">Run selected durations</button>
+  </div>
+</div>
+<div class="help">
+  Notes in SPN: C4, Eb3, F#5, Bb2, etc. Sharps: #, Flats: b. Middle C = C4.
+</div>
+<div class="presets">
+  <label>Presets:</label>
+  <button onclick="preset('C4 E4 G4 B4 A4 F4 A4 C5','')">C E G B A F A C</button>
+  <button onclick="preset('C4 E4 G4','')">C E G</button>
+  <button onclick="preset('C4 E4 G4 B4','')">C E G B</button>
+  <button onclick="preset('C4 D4 E4 F4 G4 A4 B4 C5','')">Scale</button>
+  <button onclick="preset('C4 E4 G4 B4','G3 C4 E4 D4')">CEGB + bass</button>
+  <button onclick="preset('E4 F4 G4 A4 B4 C5','C3 C3 C3 G2 G2 C3')">Melody + bass</button>
+</div>
+<div id="error"></div>
+<pre id="output">Click "Run" to start.</pre>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// Harmonic Analysis Lab — SPN input, two voices, full detail
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const DECAY_RATE = 0.3;
+const PASSING_NOTE_THRESHOLD = 0.125;
+const MIN_SALIENCE = 0.025;
+const NON_CHORD_TONE_FLOOR = 0.05;
+const COMPLEXITY_PENALTY = 0.05;
+
+const CHORD_TYPES = {
+  major:       { intervals: [0, 4, 7],     required: [0, 4],         complexity: 1 },
+  minor:       { intervals: [0, 3, 7],     required: [0, 3],         complexity: 1 },
+  diminished:  { intervals: [0, 3, 6],     required: [0, 3, 6],     complexity: 2 },
+  augmented:   { intervals: [0, 4, 8],     required: [0, 4, 8],     complexity: 2 },
+  dominant_7:  { intervals: [0, 4, 7, 10], required: [0, 4, 10],    complexity: 3 },
+  major_7:     { intervals: [0, 4, 7, 11], required: [0, 4, 11],    complexity: 3 },
+  minor_7:     { intervals: [0, 3, 7, 10], required: [0, 3, 10],    complexity: 3 },
+  half_dim_7:  { intervals: [0, 3, 6, 10], required: [0, 3, 6, 10], complexity: 4 },
+  dim_7:       { intervals: [0, 3, 6, 9],  required: [0, 3, 6, 9],  complexity: 4 },
+  min_maj_7:   { intervals: [0, 3, 7, 11], required: [0, 3, 11],    complexity: 4 },
+  major_6:     { intervals: [0, 4, 7, 9],  required: [0, 4, 9],     complexity: 3 },
+  minor_6:     { intervals: [0, 3, 7, 9],  required: [0, 3, 9],     complexity: 3 },
+};
+
+const NOTE_NAMES = ['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+const TYPE_SHORT = {
+  major:'', minor:'m', diminished:'dim', augmented:'aug',
+  dominant_7:'7', major_7:'maj7', minor_7:'m7',
+  half_dim_7:'m7b5', dim_7:'dim7', min_maj_7:'m(maj7)',
+  major_6:'6', minor_6:'m6',
+};
+
+function cn(root, type) { return NOTE_NAMES[root] + (TYPE_SHORT[type] ?? type); }
+function pcName(pc) { return NOTE_NAMES[((pc % 12) + 12) % 12]; }
+
+// ─── SPN parsing ──────────────────────────────────────────────────────────
+
+/** Parse "C4", "Eb3", "F#5", "Bb2" etc. to MIDI pitch. Returns null on failure. */
+function parseSPN(str) {
+  const m = str.match(/^([A-Ga-g])(#{1,2}|b{1,2})?(-?\d)$/);
+  if (!m) return null;
+  const base = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+  let pc = base[m[1].toUpperCase()];
+  if (pc === undefined) return null;
+  const acc = m[2] || '';
+  if (acc === '#') pc += 1;
+  else if (acc === '##') pc += 2;
+  else if (acc === 'b') pc -= 1;
+  else if (acc === 'bb') pc -= 2;
+  const octave = parseInt(m[3]);
+  return (octave + 1) * 12 + pc;
+}
+
+/** Format MIDI pitch as SPN string for display. */
+function midiToSPN(midi) {
+  const pc = ((midi % 12) + 12) % 12;
+  const oct = Math.floor(midi / 12) - 1;
+  return NOTE_NAMES[pc] + oct;
+}
+
+/** Parse a voice input string. Returns array of {pitch, onset, duration} or throws. */
+function parseVoice(str, duration) {
+  const tokens = str.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+  const notes = [];
+  let onset = 0;
+  for (const tok of tokens) {
+    const midi = parseSPN(tok);
+    if (midi === null) throw new Error(`Cannot parse note "${tok}". Use SPN: C4, Eb3, F#5, etc.`);
+    notes.push({ pitch: midi, onset, duration });
+    onset += duration;
+  }
+  return notes;
+}
+
+/** Merge two voice note arrays into one sorted list. */
+function mergeVoices(v1notes, v2notes) {
+  const all = [...v1notes, ...v2notes];
+  all.sort((a, b) => a.onset - b.onset || a.pitch - b.pitch);
+  return all;
+}
+
+// ─── metric weight (4/4) ──────────────────────────────────────────────────
+
+function metricMult(onset) {
+  const pos = ((onset % 4) + 4) % 4;
+  if (pos < 0.01) return 1.2;
+  if (Math.abs(pos - 2) < 0.01) return 1.0;
+  if (Math.abs(pos - 1) < 0.01 || Math.abs(pos - 3) < 0.01) return 0.75;
+  if (Math.abs(pos % 0.5) < 0.01) return 0.5;
+  return 0.4;
+}
+
+function approachMult(interval) {
+  if (interval === null) return 1.0;
+  const a = Math.abs(interval);
+  if (a === 0) return 1.0;
+  if (a <= 2) return 0.8;
+  if (a <= 4) return 1.0;
+  if (a === 5 || a === 7 || a === 12) return 1.2;
+  return 1.0;
+}
+
+/**
+ * Preprocess: split notes at beat boundaries.
+ * For multi-voice, notes is already the merged array.
+ * Approach multiplier computed per-voice (consecutive notes in same voice).
+ */
+function preprocessNotes(notes) {
+  const segments = [];
+  // Group by voice for approach calculation: notes at same onset are different voices
+  // Simple heuristic: for each note, find previous note with strictly earlier onset
+  for (let i = 0; i < notes.length; i++) {
+    const note = notes[i];
+    // Find the previous note at a strictly earlier onset (in any voice, closest onset)
+    let prev = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (notes[j].onset < note.onset) { prev = notes[j]; break; }
+    }
+    const app = approachMult(prev ? note.pitch - prev.pitch : null);
+    const end = note.onset + note.duration;
+    for (let b = Math.floor(note.onset); b < end; b++) {
+      const s = Math.max(note.onset, b);
+      const e = Math.min(end, b + 1);
+      if (e <= s) continue;
+      segments.push({ pitch: note.pitch, pitchClass: ((note.pitch % 12) + 12) % 12, onset: s, duration: e - s, approach: app });
+    }
+  }
+  segments.sort((a, b) => a.onset - b.onset || a.pitch - b.pitch);
+  return segments;
+}
+
+// ─── salience & collection ────────────────────────────────────────────────
+
+function salience(seg, decay) {
+  const raw = (seg.duration - PASSING_NOTE_THRESHOLD) * metricMult(seg.onset) * seg.approach;
+  return Math.max(raw, MIN_SALIENCE) * decay;
+}
+
+function collectPast(segments, beat) {
+  const out = [];
+  for (const seg of segments) {
+    const sb = Math.floor(seg.onset);
+    if (sb > beat) break;
+    const dist = beat - sb;
+    const d = Math.max(1.0 - dist * DECAY_RATE, 0);
+    if (d <= 0) continue;
+    out.push({ pitchClass: seg.pitchClass, pitch: seg.pitch, salience: salience(seg, d), onset: seg.onset, decay: d });
+  }
+  return out;
+}
+
+function collectBidirectional(segments, beat) {
+  const out = [];
+  for (const seg of segments) {
+    const sb = Math.floor(seg.onset);
+    const dist = Math.abs(beat - sb);
+    const d = Math.max(1.0 - dist * DECAY_RATE, 0);
+    if (d <= 0) continue;
+    out.push({ pitchClass: seg.pitchClass, pitch: seg.pitch, salience: salience(seg, d), onset: seg.onset, decay: d });
+  }
+  return out;
+}
+
+// ─── chord scoring ────────────────────────────────────────────────────────
+
+function memberWeight(interval) {
+  const n = ((interval % 12) + 12) % 12;
+  if (n === 0) return 1.1;
+  if (n === 3 || n === 4) return 1.0;
+  if (n === 7 || n === 10 || n === 11) return 0.8;
+  return 0.6;
+}
+
+function scoreChord(root, typeName, notes, positiveOnly) {
+  const def = CHORD_TYPES[typeName];
+  const pcs = new Set(notes.map(n => n.pitchClass));
+  for (const req of def.required) { if (!pcs.has((root + req) % 12)) return null; }
+  if (notes.length < 2) return null;
+  let matchedSal = 0, nctPen = 0;
+  const matched = [], nct = [];
+  let lowestPitch = Infinity, lowestInterval = null;
+  for (const n of notes) {
+    if (n.pitch < lowestPitch) { lowestPitch = n.pitch; lowestInterval = ((n.pitchClass - root) + 12) % 12; }
+  }
+  for (const n of notes) {
+    const iv = ((n.pitchClass - root) + 12) % 12;
+    if (def.intervals.includes(iv)) {
+      const w = memberWeight(iv);
+      matchedSal += n.salience * w;
+      matched.push({ onset: n.onset, pc: n.pitchClass, pitch: n.pitch, sal: n.salience, w, contrib: n.salience * w });
+    } else {
+      const p = positiveOnly ? 0 : Math.max(n.salience - NON_CHORD_TONE_FLOOR, 0);
+      nctPen += p;
+      nct.push({ onset: n.onset, pc: n.pitchClass, pitch: n.pitch, sal: n.salience, pen: p });
+    }
+  }
+  let bassMult = 1.0;
+  if (lowestInterval === 0) bassMult = 1.1;
+  else if (lowestInterval === 7) bassMult = 0.9;
+  else if (lowestInterval === 10 || lowestInterval === 11) bassMult = 0.8;
+  const score = (matchedSal - nctPen) * bassMult;
+  return { score, matched, nct, matchedSal, nctPen, bassMult, complexity: def.complexity };
+}
+
+function findCandidates(notes, positiveOnly) {
+  const pcs = new Set(notes.map(n => n.pitchClass));
+  const cands = [];
+  for (let root = 0; root < 12; root++) {
+    if (!pcs.has(root)) continue;
+    for (const [t] of Object.entries(CHORD_TYPES)) {
+      const r = scoreChord(root, t, notes, positiveOnly);
+      if (r) cands.push({ root, type: t, ...r });
+    }
+  }
+  cands.sort((a, b) => b.score - a.score);
+  return cands;
+}
+
+// ─── standard forward/backward DP ─────────────────────────────────────────
+
+function forwardDP(beatData) {
+  const n = beatData.length;
+  const dp = Array.from({ length: n }, () => new Map());
+  for (let b = 0; b < n; b++) {
+    const cands = beatData[b];
+    if (b === 0) {
+      dp[0].set('null', { total: 0, prev: null, chord: null, chain: 0 });
+      for (const c of cands) {
+        dp[0].set(c.key, { total: c.score - c.complexity * COMPLEXITY_PENALTY, prev: null, chord: c, chain: 1 });
+      }
+      continue;
+    }
+    let bestNullTotal = -Infinity, bestNullPrev = null;
+    for (const [pk, ps] of dp[b - 1]) {
+      if (ps.total > bestNullTotal) { bestNullTotal = ps.total; bestNullPrev = pk; }
+    }
+    dp[b].set('null', { total: bestNullTotal, prev: bestNullPrev, chord: null, chain: 0 });
+    for (const c of cands) {
+      let bestTotal = -Infinity, bestPrev = null, bestChain = 1;
+      for (const [pk, ps] of dp[b - 1]) {
+        const same = ps.chord && ps.chord.root === c.root && ps.chord.type === c.type;
+        const chain = same ? ps.chain + 1 : 1;
+        const t = ps.total + c.score - c.complexity * COMPLEXITY_PENALTY;
+        if (t > bestTotal) { bestTotal = t; bestPrev = pk; bestChain = chain; }
+      }
+      const existing = dp[b].get(c.key);
+      if (!existing || bestTotal > existing.total) {
+        dp[b].set(c.key, { total: bestTotal, prev: bestPrev, chord: c, chain: bestChain });
+      }
+    }
+  }
+  return dp;
+}
+
+function backtrack(dp) {
+  const n = dp.length;
+  let bestKey = null, bestTotal = -Infinity;
+  for (const [k, s] of dp[n - 1]) { if (s.total > bestTotal) { bestTotal = s.total; bestKey = k; } }
+  const path = [];
+  let cur = bestKey;
+  for (let b = n - 1; b >= 0; b--) {
+    const s = dp[b].get(cur);
+    path.unshift({ beat: b, key: cur, chord: s.chord, total: s.total, chain: s.chain });
+    cur = s.prev;
+  }
+  return path;
+}
+
+function backwardDP(beatData) {
+  const n = beatData.length;
+  const dp = Array.from({ length: n }, () => new Map());
+  for (let b = n - 1; b >= 0; b--) {
+    const cands = beatData[b];
+    if (b === n - 1) {
+      dp[b].set('null', { total: 0, next: null, chord: null, chain: 0 });
+      for (const c of cands) {
+        dp[b].set(c.key, { total: c.score - c.complexity * COMPLEXITY_PENALTY, next: null, chord: c, chain: 1 });
+      }
+      continue;
+    }
+    let bestNullTotal = -Infinity, bestNullNext = null;
+    for (const [nk, ns] of dp[b + 1]) {
+      if (ns.total > bestNullTotal) { bestNullTotal = ns.total; bestNullNext = nk; }
+    }
+    dp[b].set('null', { total: bestNullTotal, next: bestNullNext, chord: null, chain: 0 });
+    for (const c of cands) {
+      let bestTotal = -Infinity, bestNext = null, bestChain = 1;
+      for (const [nk, ns] of dp[b + 1]) {
+        const same = ns.chord && ns.chord.root === c.root && ns.chord.type === c.type;
+        const chain = same ? ns.chain + 1 : 1;
+        const t = ns.total + c.score - c.complexity * COMPLEXITY_PENALTY;
+        if (t > bestTotal) { bestTotal = t; bestNext = nk; bestChain = chain; }
+      }
+      const existing = dp[b].get(c.key);
+      if (!existing || bestTotal > existing.total) {
+        dp[b].set(c.key, { total: bestTotal, next: bestNext, chord: c, chain: bestChain });
+      }
+    }
+  }
+  return dp;
+}
+
+// ─── path-dependent DP ────────────────────────────────────────────────────
+
+function pathDependentDP(segments, numBeats, collectFn) {
+  const dp = Array.from({ length: numBeats }, () => new Map());
+  for (let b = 0; b < numBeats; b++) {
+    const allNotes = collectFn(segments, b);
+    if (b === 0) {
+      dp[0].set('null|-Inf', { total: 0, prevSK: null, chord: null, chain: 0, boundary: -Infinity });
+      const cands = findCandidates(allNotes);
+      for (const c of cands) {
+        const bnd = c.matched.length > 0 ? Math.max(...c.matched.map(m => m.onset)) : -Infinity;
+        const sk = `${c.root}-${c.type}|${bnd}`;
+        const t = c.score - c.complexity * COMPLEXITY_PENALTY;
+        const ex = dp[0].get(sk);
+        if (!ex || t > ex.total) {
+          dp[0].set(sk, { total: t, prevSK: null, chord: c, chain: 1, boundary: bnd });
+        }
+      }
+      continue;
+    }
+    const updates = new Map();
+    for (const [prevSK, prevState] of dp[b - 1]) {
+      const prevChord = prevState.chord;
+      const prevBoundary = prevState.boundary;
+      const prevCK = prevChord ? `${prevChord.root}-${prevChord.type}` : 'null';
+      {
+        const sk = `null|${prevBoundary}`;
+        const ex = updates.get(sk);
+        if (!ex || prevState.total > ex.total) {
+          updates.set(sk, { total: prevState.total, prevSK, chord: null, chain: 0, boundary: prevBoundary });
+        }
+      }
+      const pcsAll = new Set(allNotes.map(n => n.pitchClass));
+      for (let root = 0; root < 12; root++) {
+        if (!pcsAll.has(root)) continue;
+        for (const [typeName] of Object.entries(CHORD_TYPES)) {
+          const candCK = `${root}-${typeName}`;
+          const same = (candCK === prevCK);
+          const filtered = same ? allNotes : allNotes.filter(n => n.onset > prevBoundary);
+          const result = scoreChord(root, typeName, filtered);
+          if (!result) continue;
+          const chain = same ? prevState.chain + 1 : 1;
+          const t = prevState.total + result.score - result.complexity * COMPLEXITY_PENALTY;
+          const bnd = result.matched.length > 0 ? Math.max(...result.matched.map(m => m.onset)) : prevBoundary;
+          const sk = `${candCK}|${bnd}`;
+          const ex = updates.get(sk);
+          if (!ex || t > ex.total) {
+            updates.set(sk, { total: t, prevSK, chord: { key: candCK, root, type: typeName, ...result }, chain, boundary: bnd });
+          }
+        }
+      }
+    }
+    dp[b] = updates;
+  }
+  const n = numBeats;
+  let bestSK = null, bestTotal = -Infinity;
+  for (const [sk, s] of dp[n - 1]) { if (s.total > bestTotal) { bestTotal = s.total; bestSK = sk; } }
+  const path = [];
+  let cur = bestSK;
+  for (let b = n - 1; b >= 0; b--) {
+    const s = dp[b].get(cur);
+    path.unshift({ beat: b, key: s.chord ? `${s.chord.root}-${s.chord.type}` : 'null', chord: s.chord, total: s.total, chain: s.chain, boundary: s.boundary });
+    cur = s.prevSK;
+  }
+  return { dp, path };
+}
+
+// ─── four approaches ──────────────────────────────────────────────────────
+
+function approachA(segments, numBeats) {
+  return pathDependentDP(segments, numBeats, collectBidirectional);
+}
+
+function approachB(segments, numBeats) {
+  // Pass 1: positive-only (no unharmonised penalties — assignment not yet known)
+  const p1BeatData = [];
+  for (let b = 0; b < numBeats; b++) {
+    const notes = collectPast(segments, b);
+    const cands = findCandidates(notes, true);
+    p1BeatData.push(cands.map(c => ({ key: `${c.root}-${c.type}`, ...c })));
+  }
+  const fwd = forwardDP(p1BeatData);
+  const bwd = backwardDP(p1BeatData);
+  const p1path = [];
+  for (let b = 0; b < numBeats; b++) {
+    let bestKey = 'null', bestCombined = -Infinity, bestChord = null;
+    for (const [key, fs] of fwd[b]) {
+      const bs = bwd[b].get(key);
+      if (!bs) continue;
+      const localScore = fs.chord ? fs.chord.score - fs.chord.complexity * COMPLEXITY_PENALTY : 0;
+      const combined = fs.total + bs.total - localScore;
+      if (combined > bestCombined) { bestCombined = combined; bestKey = key; bestChord = fs.chord; }
+    }
+    p1path.push({ beat: b, key: bestKey, chord: bestChord, total: bestCombined });
+  }
+  const p1info = p1path.map(p => {
+    if (!p.chord) return { chordKey: 'null', matchedOnsets: [] };
+    return { chordKey: p.key, matchedOnsets: p.chord.matched.map(m => m.onset) };
+  });
+  const p2BeatData = [];
+  for (let b = 0; b < numBeats; b++) {
+    const allNotes = collectPast(segments, b);
+    const pcs = new Set(allNotes.map(n => n.pitchClass));
+    const cands = [];
+    for (let root = 0; root < 12; root++) {
+      if (!pcs.has(root)) continue;
+      for (const [typeName] of Object.entries(CHORD_TYPES)) {
+        const candKey = `${root}-${typeName}`;
+        let boundary = -Infinity;
+        for (let pb = 0; pb < b; pb++) {
+          if (p1info[pb].chordKey === candKey || p1info[pb].chordKey === 'null') continue;
+          for (const onset of p1info[pb].matchedOnsets) { if (onset > boundary) boundary = onset; }
+        }
+        const filtered = allNotes.filter(n => {
+          const noteBeat = Math.floor(n.onset);
+          if (noteBeat < p1info.length && p1info[noteBeat].chordKey === candKey) return true;
+          if (n.onset > boundary) return true;
+          return false;
+        });
+        const result = scoreChord(root, typeName, filtered);
+        if (result) cands.push({ key: candKey, root, type: typeName, ...result });
+      }
+    }
+    cands.sort((a, b) => b.score - a.score);
+    p2BeatData.push(cands);
+  }
+  const p2dp = forwardDP(p2BeatData);
+  return { p1path, fwd, bwd, p2dp, path: backtrack(p2dp), p1BeatData, p2BeatData };
+}
+
+function approachC(segments, numBeats) {
+  // Pass 1: positive-only (no unharmonised penalties — assignment not yet known)
+  const p1BeatData = [];
+  for (let b = 0; b < numBeats; b++) {
+    const notes = collectPast(segments, b);
+    const cands = findCandidates(notes, true);
+    p1BeatData.push(cands.map(c => ({ key: `${c.root}-${c.type}`, ...c })));
+  }
+  const p1dp = forwardDP(p1BeatData);
+  const p1path = backtrack(p1dp);
+  const p1info = p1path.map(p => {
+    if (!p.chord) return { chordKey: 'null', matchedOnsets: [] };
+    return { chordKey: p.key, matchedOnsets: p.chord.matched.map(m => m.onset) };
+  });
+  const p2BeatData = [];
+  for (let b = 0; b < numBeats; b++) {
+    const allNotes = collectPast(segments, b);
+    const pcs = new Set(allNotes.map(n => n.pitchClass));
+    const cands = [];
+    for (let root = 0; root < 12; root++) {
+      if (!pcs.has(root)) continue;
+      for (const [typeName] of Object.entries(CHORD_TYPES)) {
+        const candKey = `${root}-${typeName}`;
+        let boundary = -Infinity;
+        for (let pb = 0; pb < b; pb++) {
+          if (p1info[pb].chordKey === candKey || p1info[pb].chordKey === 'null') continue;
+          for (const onset of p1info[pb].matchedOnsets) { if (onset > boundary) boundary = onset; }
+        }
+        const filtered = allNotes.filter(n => {
+          const noteBeat = Math.floor(n.onset);
+          if (noteBeat < p1info.length && p1info[noteBeat].chordKey === candKey) return true;
+          if (n.onset > boundary) return true;
+          return false;
+        });
+        const result = scoreChord(root, typeName, filtered);
+        if (result) cands.push({ key: candKey, root, type: typeName, ...result });
+      }
+    }
+    cands.sort((a, b) => b.score - a.score);
+    p2BeatData.push(cands);
+  }
+  const p2dp = forwardDP(p2BeatData);
+  return { p1path, p1dp, p2dp, path: backtrack(p2dp), p1BeatData, p2BeatData };
+}
+
+function approachD(segments, numBeats) {
+  return pathDependentDP(segments, numBeats, collectPast);
+}
+
+// ─── harmony display helpers ──────────────────────────────────────────────
+
+let lines = [];
+function log(s) { lines.push(s); }
+
+/** Backtrack path-dependent DP from a state at beat b. */
+function backtrackPD(dp, beat, stateKey) {
+  const path = [];
+  let cur = stateKey;
+  for (let b = beat; b >= 0; b--) {
+    const s = dp[b].get(cur);
+    if (!s) break;
+    path.unshift({ beat: b, chord: s.chord, boundary: s.boundary, total: s.total });
+    cur = s.prevSK;
+  }
+  return path;
+}
+
+/** Backtrack simple DP from a state at beat b. */
+function backtrackFrom(dp, beat, key) {
+  const path = [];
+  let cur = key;
+  for (let b = beat; b >= 0; b--) {
+    const s = dp[b].get(cur);
+    if (!s) break;
+    path.unshift({ beat: b, chord: s.chord, total: s.total });
+    cur = s.prev;
+  }
+  return path;
+}
+
+/** Format a harmony path as a chord progression string. */
+function fmtHarmony(path) {
+  const parts = [];
+  for (const p of path) {
+    const name = p.chord ? cn(p.chord.root, p.chord.type) : '-';
+    const last = parts[parts.length - 1];
+    if (last && last.name === name) last.count++;
+    else parts.push({ name, count: 1 });
+  }
+  return parts.filter(p => p.name !== '-')
+    .map(p => p.count > 1 ? `${p.name}(x${p.count})` : p.name)
+    .join(' -> ') || '(none)';
+}
+
+/** Collect all unharmonised notes across a full harmony path. */
+function getUnharmonised(path) {
+  const notes = [];
+  for (const p of path) {
+    if (p.chord && p.chord.nct) {
+      for (const n of p.chord.nct) {
+        if (n.pen > 0) notes.push(n);
+      }
+    }
+  }
+  return notes;
+}
+
+/** Format a chord's scoring detail. */
+function fmtChordDetail(chord) {
+  if (!chord) return '(null)';
+  const name = cn(chord.root, chord.type);
+  const matchStr = chord.matched.map(m =>
+    `${midiToSPN(m.pitch)}@${m.onset}: sal=${m.sal.toFixed(3)} * w=${m.w} = ${m.contrib.toFixed(3)}`
+  ).join(', ');
+  const unhStr = chord.nct.filter(n => n.pen > 0).map(n =>
+    `${midiToSPN(n.pitch)}@${n.onset}: sal=${n.sal.toFixed(3)} pen=${n.pen.toFixed(3)}`
+  ).join(', ');
+  let s = `${name}  local=${chord.score.toFixed(3)}  cplx=${chord.complexity}  bass=${chord.bassMult.toFixed(1)}`;
+  s += `\n               matched: [${matchStr}]`;
+  if (unhStr) s += `\n               unharmonised: [${unhStr}]`;
+  return s;
+}
+
+/** Show one harmony entry with full detail. */
+function showHarmonyEntry(idx, path, total) {
+  const prog = fmtHarmony(path);
+  const unh = getUnharmonised(path);
+  const unhStr = unh.length > 0
+    ? unh.map(n => `${midiToSPN(n.pitch)}@${n.onset}(${n.pen.toFixed(3)})`).join(', ')
+    : '(none)';
+  log(`      #${idx}  ${prog}    total=${total.toFixed(3)}`);
+
+  // Show each chord in the path
+  const seen = new Set();
+  for (const p of path) {
+    if (!p.chord) continue;
+    const key = `${p.beat}-${p.chord.root}-${p.chord.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const name = cn(p.chord.root, p.chord.type);
+    const bndStr = p.boundary !== undefined ? `  bnd=${p.boundary}` : '';
+    log(`            beat ${p.beat}: ${fmtChordDetail(p.chord)}${bndStr}`);
+  }
+  log(`            unharmonised in harmony: [${unhStr}]`);
+}
+
+// ─── approach display: path-dependent (A, D) ─────────────────────────────
+
+function showApproachPD(label, dp, bestPath, numBeats) {
+  log(`\n  ${label}`);
+
+  for (let b = 0; b < numBeats; b++) {
+    const map = dp[b];
+    const states = [...map.entries()]
+      .filter(([k]) => !k.startsWith('null'))
+      .sort((a, b) => b[1].total - a[1].total);
+
+    if (states.length === 0) { log(`    beat ${b}: (no candidates)`); continue; }
+
+    log(`    beat ${b}:`);
+
+    // (a) Top 3 harmonies up to this beat
+    log(`      Top 3 harmonies to this beat:`);
+    const shown = Math.min(3, states.length);
+    for (let i = 0; i < shown; i++) {
+      const [sk, s] = states[i];
+      const path = backtrackPD(dp, b, sk);
+      showHarmonyEntry(i + 1, path, s.total);
+    }
+
+    // (c) Best harmony for each of top 3 chords
+    const byChord = new Map();
+    for (const [sk, s] of states) {
+      if (!s.chord) continue;
+      const ck = `${s.chord.root}-${s.chord.type}`;
+      const ex = byChord.get(ck);
+      if (!ex || s.total > ex.total) byChord.set(ck, { sk, s });
+    }
+    const topChords = [...byChord.entries()]
+      .sort((a, b) => b[1].s.total - a[1].s.total)
+      .slice(0, 3);
+
+    log(`      Best harmony per chord:`);
+    for (const [ck, { sk, s }] of topChords) {
+      const name = cn(s.chord.root, s.chord.type);
+      const path = backtrackPD(dp, b, sk);
+      log(`        ${name.padEnd(8)} via ${fmtHarmony(path).padEnd(24)} total=${s.total.toFixed(3)}`);
+    }
+  }
+
+  // (b) Top 3 harmonies overall (at final beat)
+  const lastMap = dp[numBeats - 1];
+  const finalStates = [...lastMap.entries()]
+    .filter(([k]) => !k.startsWith('null'))
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 3);
+
+  log(`\n    Top 3 complete harmonies:`);
+  for (let i = 0; i < finalStates.length; i++) {
+    const [sk, s] = finalStates[i];
+    const path = backtrackPD(dp, numBeats - 1, sk);
+    showHarmonyEntry(i + 1, path, s.total);
+  }
+
+  // Best path result
+  const prog = fmtHarmony(bestPath);
+  log(`\n  RESULT: ${prog}  (total=${bestPath[bestPath.length - 1].total.toFixed(3)})`);
+}
+
+// ─── approach display: simple DP (B, C pass 2) ───────────────────────────
+
+function showApproachSimple(label, dp, bestPath, numBeats) {
+  log(`\n  ${label}`);
+
+  for (let b = 0; b < numBeats; b++) {
+    const map = dp[b];
+    const states = [...map.entries()]
+      .filter(([k]) => k !== 'null')
+      .sort((a, b) => b[1].total - a[1].total);
+
+    if (states.length === 0) { log(`    beat ${b}: (no candidates)`); continue; }
+
+    log(`    beat ${b}:`);
+
+    // (a) Top 3 harmonies to this beat
+    log(`      Top 3 harmonies to this beat:`);
+    const shown = Math.min(3, states.length);
+    for (let i = 0; i < shown; i++) {
+      const [key, s] = states[i];
+      const path = backtrackFrom(dp, b, key);
+      showHarmonyEntry(i + 1, path, s.total);
+    }
+
+    // (c) Best harmony per chord (for simple DP, key = chord, so top 3 states = top 3 chords)
+    log(`      Best harmony per chord:`);
+    for (let i = 0; i < shown; i++) {
+      const [key, s] = states[i];
+      if (!s.chord) continue;
+      const name = cn(s.chord.root, s.chord.type);
+      const path = backtrackFrom(dp, b, key);
+      log(`        ${name.padEnd(8)} via ${fmtHarmony(path).padEnd(24)} total=${s.total.toFixed(3)}`);
+    }
+  }
+
+  // (b) Top 3 complete harmonies
+  const lastMap = dp[numBeats - 1];
+  const finalStates = [...lastMap.entries()]
+    .filter(([k]) => k !== 'null')
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 3);
+
+  log(`\n    Top 3 complete harmonies:`);
+  for (let i = 0; i < finalStates.length; i++) {
+    const [key, s] = finalStates[i];
+    const path = backtrackFrom(dp, numBeats - 1, key);
+    showHarmonyEntry(i + 1, path, s.total);
+  }
+
+  const prog = fmtHarmony(bestPath);
+  log(`\n  RESULT: ${prog}  (total=${bestPath[bestPath.length - 1].total.toFixed(3)})`);
+}
+
+// ─── run ──────────────────────────────────────────────────────────────────
+
+function runTestFromNotes(allNotes, label) {
+  const segments = preprocessNotes(allNotes);
+  const maxEnd = Math.max(...allNotes.map(n => n.onset + n.duration));
+  const numBeats = Math.ceil(maxEnd);
+
+  const noteDesc = allNotes.map(n => midiToSPN(n.pitch)).join(' ');
+  log(`\n${'='.repeat(78)}`);
+  log(`  ${label}  (${noteDesc}, ${numBeats} beats)`);
+  log('='.repeat(78));
+
+  log('\n  Notes per beat:');
+  for (let b = 0; b < numBeats; b++) {
+    const past = collectPast(segments, b);
+    const desc = past.map(n =>
+      `${midiToSPN(n.pitch)}@${n.onset}(sal=${n.salience.toFixed(3)}, decay=${n.decay.toFixed(1)})`
+    ).join('  ');
+    log(`    beat ${b}: ${desc}`);
+  }
+
+  const a = approachA(segments, numBeats);
+  showApproachPD('A - Bidirectional + path-dependent boundary', a.dp, a.path, numBeats);
+
+  const bRes = approachB(segments, numBeats);
+  log(`\n  B - Fwd+Bwd combined two-pass`);
+  log(`    Pass 1 (positive-only, fwd+bwd): ${bRes.p1path.map(p => p.chord ? cn(p.chord.root, p.chord.type) : '-').join(' | ')}`);
+  showApproachSimple('    Pass 2 (constrained, full scoring):', bRes.p2dp, bRes.path, numBeats);
+
+  const c = approachC(segments, numBeats);
+  log(`\n  C - Forward-only two-pass`);
+  log(`    Pass 1 (positive-only, fwd): ${c.p1path.map(p => p.chord ? cn(p.chord.root, p.chord.type) : '-').join(' | ')}`);
+  showApproachSimple('    Pass 2 (constrained, full scoring):', c.p2dp, c.path, numBeats);
+
+  const d = approachD(segments, numBeats);
+  showApproachPD('D - Path-dependent boundary (past-only)', d.dp, d.path, numBeats);
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────
+
+function setError(msg) { document.getElementById('error').textContent = msg; }
+
+function preset(v1, v2) {
+  document.getElementById('v1').value = v1;
+  document.getElementById('v2').value = v2;
+}
+
+function buildNotes(v1str, dur1, v2str, dur2) {
+  const v1 = parseVoice(v1str, dur1);
+  const v2 = v2str.trim() ? parseVoice(v2str, dur2) : [];
+  return mergeVoices(v1, v2);
+}
+
+function doRunAll() {
+  lines = [];
+  setError('');
+  try {
+    const v1str = document.getElementById('v1').value;
+    const v2str = document.getElementById('v2').value;
+    const dur2 = parseFloat(document.getElementById('dur2').value);
+
+    log(`Harmonic Analysis Lab   Decay=${DECAY_RATE}, complexity_penalty=${COMPLEXITY_PENALTY}/level`);
+
+    for (const [dur, label] of [[2,'HALF NOTES'],[1,'QUARTER NOTES'],[0.5,'EIGHTH NOTES'],[0.25,'SIXTEENTH NOTES']]) {
+      const notes = buildNotes(v1str, dur, v2str, v2str.trim() ? dur2 : dur);
+      if (notes.length < 2) { setError('Need at least 2 notes total.'); return; }
+      runTestFromNotes(notes, label);
+    }
+
+    document.getElementById('output').textContent = lines.join('\n');
+    lines = [];
+  } catch (e) { setError(e.message); }
+}
+
+function doRunOne() {
+  lines = [];
+  setError('');
+  try {
+    const v1str = document.getElementById('v1').value;
+    const v2str = document.getElementById('v2').value;
+    const dur1 = parseFloat(document.getElementById('dur1').value);
+    const dur2 = parseFloat(document.getElementById('dur2').value);
+    const notes = buildNotes(v1str, dur1, v2str, dur2);
+    if (notes.length < 2) { setError('Need at least 2 notes total.'); return; }
+
+    const labels = { 2: 'HALF', 1: 'QUARTER', 0.5: 'EIGHTH', 0.25: 'SIXTEENTH' };
+    let label = `V1:${labels[dur1]||dur1}`;
+    if (v2str.trim()) label += ` V2:${labels[dur2]||dur2}`;
+
+    log(`Harmonic Analysis Lab   Decay=${DECAY_RATE}, complexity_penalty=${COMPLEXITY_PENALTY}/level`);
+    runTestFromNotes(notes, label);
+
+    document.getElementById('output').textContent = lines.join('\n');
+    lines = [];
+  } catch (e) { setError(e.message); }
+}
+
+// Run on load
+doRunOne();
+</script>
+</body>
+</html>
