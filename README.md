@@ -46,26 +46,6 @@
 
 ---
 
-
-## GitHub Pages deployment (tablet-ready, no computer runtime)
-
-This repo now includes an automated GitHub Pages workflow at `.github/workflows/deploy-pages.yml`.
-
-### One-time repo settings
-1. In GitHub, go to **Settings → Pages**.
-2. Under **Build and deployment**, choose **Source: GitHub Actions**.
-
-### Deploy flow
-- Any push to the `work` branch triggers deployment automatically.
-- You can also trigger manually from **Actions → Deploy static site to GitHub Pages → Run workflow**.
-
-### Open on tablet
-Once deployment completes, open:
-- `https://<your-github-username>.github.io/<repo-name>/harmonic-lab-new.html`
-
-If your repository is named `harmony-analysis`, the URL will be:
-- `https://<your-github-username>.github.io/harmony-analysis/harmonic-lab-new.html`
-
 ## Planning and design docs
 
 - Detailed inference strategy implementation notes (Q5 B vs C):
