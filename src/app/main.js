@@ -522,8 +522,6 @@ function approachD(segments, numBeats) {
 
 let lines = [];
 let runSummaries = [];
-
-const APP_BUILD = '2026-02-13-1';
 function log(s) { lines.push(s); }
 
 /** Backtrack path-dependent DP from a state at beat b. */
@@ -899,8 +897,6 @@ function doRunOne() {
 }
 
 export function initHarmonicLab() {
-  const tag = document.getElementById('buildTag');
-  if (tag) tag.textContent = `build ${APP_BUILD}`;
   loadState();
   if (!runSummaries.length) doRunOne();
 }
