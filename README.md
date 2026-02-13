@@ -64,3 +64,10 @@ If GitHub shows **"This branch has conflicts"**, follow:
 - [`docs/conflict-resolution.md`](docs/conflict-resolution.md)
 
 It provides exact CLI steps to reproduce conflicts locally, resolve them file-by-file, validate, and push a clean merge-resolution commit.
+
+
+### If the live page looks outdated
+
+- Check the build tag in the app header (top-right).
+- Hard refresh the page (or open in a private tab) to bypass tablet cache.
+- Verify your latest commit has completed the `Deploy static site to GitHub Pages` workflow.
