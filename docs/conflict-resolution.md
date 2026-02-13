@@ -79,24 +79,3 @@ Likely reasons:
 - PR base branch changed.
 
 Re-run steps 2–5 against the latest base branch tip.
-
-
-## Tablet-only (no terminal) path
-
-Use this if you do not want CLI steps.
-
-1. Open the repository in mobile browser or GitHub app.
-2. Open the branch dropdown and switch to your working branch (for example `work`).
-3. If GitHub shows conflicts on a PR, tap **Resolve conflicts** (if available).
-4. If conflict editor is not available on your device, open `github.dev` by pressing `.` in the repo web view, switch to your branch, and resolve conflicts in-editor.
-5. Commit the resolved files from the web editor.
-6. Return to PR and merge.
-
-### If there is no PR to open
-
-No PR usually means your branch is not on GitHub yet. Without terminal, create a new branch directly in GitHub web editor (`github.dev`), commit there, and then tap **Create pull request** from GitHub UI.
-
-### What repository Settings can do
-
-- Can configure Pages deployment behavior.
-- Cannot push local-only commits/branches from another machine/environment.
