@@ -33,8 +33,8 @@
 
 ## Captured direction decisions
 
-- Primary persona: **music theory students**.
-- Primary JTBD: **analyze compositions in depth**.
+- Primary persona: **composers**.
+- Primary JTBD: **identify harmonies quickly, then drill down when needed**.
 - Default output: **verbose diagnostics with drill-down**.
 - Meter direction: **user-selectable time signatures**.
 - Algorithm comparison: **keep side-by-side A/B/C/D comparison**.
@@ -54,3 +54,13 @@
   - [`docs/next-steps-plan.md`](docs/next-steps-plan.md)
 - Architecture and fine-grained separation-of-concerns plan:
   - [`docs/architecture-soc-plan.md`](docs/architecture-soc-plan.md)
+
+---
+
+## Merge-conflict help
+
+If GitHub shows **"This branch has conflicts"**, follow:
+
+- [`docs/conflict-resolution.md`](docs/conflict-resolution.md)
+
+It provides exact CLI steps to reproduce conflicts locally, resolve them file-by-file, validate, and push a clean merge-resolution commit.
