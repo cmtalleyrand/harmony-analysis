@@ -54,5 +54,5 @@
   - [`docs/next-steps-plan.md`](docs/next-steps-plan.md)
 - Architecture and fine-grained separation-of-concerns plan:
   - [`docs/architecture-soc-plan.md`](docs/architecture-soc-plan.md)
-
----
+- Delivery protocol designed to minimize admin overhead:
+  - [`docs/delivery-protocol.md`](docs/delivery-protocol.md)
