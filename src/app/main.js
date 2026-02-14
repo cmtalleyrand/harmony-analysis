@@ -523,7 +523,7 @@ function approachD(segments, numBeats) {
 let lines = [];
 let runSummaries = [];
 
-const APP_BUILD = '2026-02-13-1';
+const APP_BUILD = window.__APP_BUILD__ || 'local-dev';
 function log(s) { lines.push(s); }
 
 /** Backtrack path-dependent DP from a state at beat b. */

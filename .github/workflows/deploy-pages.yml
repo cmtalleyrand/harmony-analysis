@@ -28,6 +28,12 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+
+      - name: Stamp build id for cache-busting
+        run: |
+          BUILD_ID="${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}"
+          sed -i "s/__BUILD_ID__/${BUILD_ID}/g" harmonic-lab-new.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
