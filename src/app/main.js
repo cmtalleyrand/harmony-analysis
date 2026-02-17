@@ -522,6 +522,8 @@ function approachD(segments, numBeats) {
 
 let lines = [];
 let runSummaries = [];
+
+const APP_BUILD = window.__APP_BUILD__ || 'local-dev';
 function log(s) { lines.push(s); }
 
 /** Backtrack path-dependent DP from a state at beat b. */
@@ -897,6 +899,8 @@ function doRunOne() {
 }
 
 export function initHarmonicLab() {
+  const tag = document.getElementById('buildTag');
+  if (tag) tag.textContent = `build ${APP_BUILD}`;
   loadState();
   if (!runSummaries.length) doRunOne();
 }

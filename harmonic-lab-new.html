@@ -44,7 +44,7 @@
 </style>
 </head>
 <body>
-<h1>Harmonic Analysis Lab</h1>
+<div class="topbar"><h1>Harmonic Analysis Lab</h1><div id="buildTag" class="build-tag">build</div></div>
 <div class="layout">
   <section class="panel">
     <div class="controls">
@@ -108,7 +108,10 @@
 </div>
 
 <script type="module">
-import { initHarmonicLab } from './src/app/main.js';
+const RAW_BUILD_ID = '__BUILD_ID__';
+const BUILD_ID = RAW_BUILD_ID.includes('BUILD_ID') ? 'local-dev' : RAW_BUILD_ID;
+window.__APP_BUILD__ = BUILD_ID;
+const { initHarmonicLab } = await import(`./src/app/main.js?v=${encodeURIComponent(BUILD_ID)}`);
 initHarmonicLab();
 </script>
 </body>
