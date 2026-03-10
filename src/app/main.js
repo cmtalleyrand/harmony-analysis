@@ -820,7 +820,7 @@ function saveState() {
     dur1: document.getElementById('dur1').value,
     dur2: document.getElementById('dur2').value,
     timeSig: document.getElementById('timeSig').value,
-    outputHtml: document.getElementById('output').innerHTML,
+    meter: CURRENT_METER,
     summary: runSummaries,
   };
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -836,8 +836,9 @@ function loadState() {
     if (st.dur1 !== undefined) document.getElementById('dur1').value = st.dur1;
     if (st.dur2 !== undefined) document.getElementById('dur2').value = st.dur2;
     if (st.timeSig !== undefined) document.getElementById('timeSig').value = st.timeSig;
+    if (st.timeSig !== undefined) setTimeSignature(st.timeSig);
+    else if (st.meter && typeof st.meter === 'object') CURRENT_METER = st.meter;
     if (Array.isArray(st.summary)) runSummaries = st.summary;
-    if (typeof st.outputHtml === 'string' && st.outputHtml.trim()) document.getElementById('output').innerHTML = st.outputHtml;
     renderSummary();
   } catch (e) {
     console.warn('Failed to load saved state', e);
