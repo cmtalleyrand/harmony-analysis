@@ -145,7 +145,8 @@ function preprocessNotes(notes) {
   const segments = [];
   const prevByVoice = new Map();
   for (const note of notes) {
-    const prev = note.voice ? prevByVoice.get(note.voice) ?? null : null;
+    const voiceKey = note.voice ?? '__default_voice__';
+    const prev = prevByVoice.get(voiceKey) ?? null;
     const app = approachMult(prev ? note.pitch - prev.pitch : null);
     const end = note.onset + note.duration;
     let cursor = note.onset;
@@ -157,7 +158,7 @@ function preprocessNotes(notes) {
       segments.push({ pitch: note.pitch, pitchClass: ((note.pitch % 12) + 12) % 12, onset: cursor, duration: e - cursor, approach: app, voice: note.voice });
       cursor = e;
     }
-    if (note.voice) prevByVoice.set(note.voice, note);
+    prevByVoice.set(voiceKey, note);
   }
   segments.sort((a, b) => a.onset - b.onset || a.pitch - b.pitch);
   return segments;
