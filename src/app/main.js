@@ -143,15 +143,9 @@ function approachMult(interval) {
  */
 function preprocessNotes(notes) {
   const segments = [];
-  // Group by voice for approach calculation: notes at same onset are different voices
-  // Simple heuristic: for each note, find previous note with strictly earlier onset
-  for (let i = 0; i < notes.length; i++) {
-    const note = notes[i];
-    // Find the previous note at a strictly earlier onset (in any voice, closest onset)
-    let prev = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (notes[j].onset < note.onset) { prev = notes[j]; break; }
-    }
+  const prevByVoice = new Map();
+  for (const note of notes) {
+    const prev = note.voice ? prevByVoice.get(note.voice) ?? null : null;
     const app = approachMult(prev ? note.pitch - prev.pitch : null);
     const end = note.onset + note.duration;
     let cursor = note.onset;
@@ -160,9 +154,10 @@ function preprocessNotes(notes) {
       const nextBoundary = (beatIndex + 1) * CURRENT_METER.beatLen;
       const e = Math.min(end, nextBoundary);
       if (e <= cursor) break;
-      segments.push({ pitch: note.pitch, pitchClass: ((note.pitch % 12) + 12) % 12, onset: cursor, duration: e - cursor, approach: app });
+      segments.push({ pitch: note.pitch, pitchClass: ((note.pitch % 12) + 12) % 12, onset: cursor, duration: e - cursor, approach: app, voice: note.voice });
       cursor = e;
     }
+    if (note.voice) prevByVoice.set(note.voice, note);
   }
   segments.sort((a, b) => a.onset - b.onset || a.pitch - b.pitch);
   return segments;
@@ -796,8 +791,8 @@ function preset(v1, v2) {
 }
 
 function buildNotes(v1str, dur1, v2str, dur2) {
-  const v1 = parseVoice(v1str, dur1);
-  const v2 = v2str.trim() ? parseVoice(v2str, dur2) : [];
+  const v1 = parseVoice(v1str, dur1).map(n => ({ ...n, voice: 'v1' }));
+  const v2 = v2str.trim() ? parseVoice(v2str, dur2).map(n => ({ ...n, voice: 'v2' })) : [];
   return mergeVoices(v1, v2);
 }
 
